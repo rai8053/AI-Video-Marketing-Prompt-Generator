@@ -1,20 +1,125 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# AI Video Marketing Prompt Generator 🎬🚀
 
-# Run and deploy your AI Studio app
+An elite, full-stack intelligence application that crawls public website URLs (or ingests custom brand assets) and leverages the native power of Gemini models to programmatically output high-fidelity video campaign blueprints, structured visuals, visual direction cues, and majestic **Single Unified Master Prompts** optimized directly for state-of-the-art open-source text-to-video diffusion models (such as HunyuanVideo, CogVideoX, and Stable Video Diffusion).
 
-This contains everything you need to run your app locally.
+---
 
-View your app in AI Studio: https://ai.studio/apps/f1d31ee0-fe49-4ff2-bcfe-47c8e5b31be0
+## 🌟 Key Application Highlights
 
-## Run Locally
+* **Automated Website Scraping & Extraction**: Direct extraction of brand messaging, target aesthetics, and value propositions from active landing page contexts or custom seed details.
+* **Curated Storytelling Hook Matrix**: Select from 6 unique creative cinematic styles:
+  * 🎬 **Cinematic Story** (high-production value narratives)
+  * 🔎 **Macro Product** (intimate closeup detailing & crisp focus)
+  * ⚡ **High Energy** (fast cuts, kinetic camera paths, dynamic pacing)
+  * 🌌 **Surreal Art** (dreamlike atmospheres & abstract forms)
+  * 📼 **Vintage VHS** (retro nostalgia, analogue textures, VHS lens coloring)
+  * ☀️ **Sleek Minimal** (understated, spacious, bright and modern layouts)
+* **Custom AI Temperature Scaling**: Dynamically tune output temperature profiles:
+  * *Precise* (0.3) for consistent, literal brand translations.
+  * *Balanced* (0.7) for standard commercial layout.
+  * *High-Creative* (1.15) for experimental and unique visual metaphors.
+* **Deterministic Variation Engine**: Instantly iterate and compare creative outputs with the "Regenerate Variation" control. Uses incremental seed states (`#variationSeed`) and semantic modifiers to steer camera directions without losing core brand structure.
+* **Integrated Local Video Synthesis Tutorials**: Step-by-step setup checklists and guides for local developer pipelines including ComfyUI node setup, Python diffusers code, and hardware requirements.
 
-**Prerequisites:**  Node.js
+---
 
+## 🛠️ The Tech Stack
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+### Client-Side SPA (React + TypeScript)
+* **Framework**: React 18 / Vite
+* **Styling**: Tailwind CSS (Utility-First modern layout)
+* **Motion & Animations**: `motion/react` lightweight UI transitions
+* **Icons**: `lucide-react` high-contrast vector assets
+
+### High-Performance Server-Side API
+* **Backend**: Node.js Express Server
+* **AI Orchestration**: Modern `@google/genai` TypeScript SDK
+* **Scraping Subsystem**: Server-side parsing and sanitization architecture
+* **Local Production Build**: Bundled using `esbuild` to produce optimized, self-contained `dist/server.cjs` modules for smooth container deployment.
+
+---
+
+## 🚀 Quick Setup & Local Execution
+
+Follow these steps to run the application locally on your workstation:
+
+### Prerequisites
+* **Node.js** (v18 or higher recommended)
+* **Gemini API Key** from [Google AI Studio](https://aistudio.google.com/)
+
+### 1. Clone & Install Dependencies
+```bash
+# Clone your repository
+git clone <your-github-repo-url>
+cd ai-video-marketing-prompt-generator
+
+# Install dependencies
+npm install
+```
+
+### 2. Configure Environment Variables
+Create a `.env` file in the root directory:
+```env
+# Server secret for LLM generation
+GEMINI_API_KEY=your_actual_gemini_api_key_here
+
+# Dev Server Port (Automatic fallback to 3000)
+PORT=3000
+```
+
+### 3. Start Development Server
+```bash
+# Runs the Vite dev environment alongside the Express backend API
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) in your web browser of choice.
+
+### 4. Build for Production
+To bundle the frontend assets and compile the TypeScript backend down into a single optimized server file:
+```bash
+# Build static client paths and CJS backend server
+npm run build
+
+# Start production-ready container instance
+npm run start
+```
+
+---
+
+## 🌌 Connecting to Local Open-Source AI Video Generators
+
+Once you generate your unified Master Prompts within the app, deploy them into local generator configurations:
+
+### Option A: ComfyUI Node Setup
+1. Clone the repository: `git clone https://github.com/comfyanonymous/ComfyUI.git`
+2. Download weights (e.g., `hunyuan_video_720p_bf16.safetensors`) and move them directly into your `models/checkpoints/` directory.
+3. Start ComfyUI with optimal VRAM budget switches: `python main.py --highvram` or `--lowvram`.
+4. Import the **Single Unified Master Prompt** string output from the app straight into your positive Text Conditioning source node.
+
+### Option B: Python Diffusers Pipeline
+```python
+import torch
+from diffusers import HunyuanVideoPipeline
+
+# Load the transformer backend
+pipe = HunyuanVideoPipeline.from_pretrained(
+    "hunyuanvideo/HunyuanVideo", 
+    torch_dtype=torch.float16
+).to("cuda")
+
+# Copy the grand cinematic narrative setup generated by the web app
+prompt = "[PASTE COPIED NARRATIVE MASTER PROMPT]"
+
+# Synthesize video sequence frame arrays
+video = pipe(
+    prompt, 
+    num_frames=61, 
+    width=1280, 
+    height=720
+).frames[0]
+```
+
+---
+
+## 📝 License
+This project is open-source and available under the MIT License.
