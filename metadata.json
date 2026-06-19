@@ -1,0 +1,6 @@
+{
+  "name": "AI Video Marketing Prompt Generator",
+  "description": "Scrape website content to automatically generate high-fidelity AI video scripts, prompt guides, and marketing metadata for campaign promotion.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
