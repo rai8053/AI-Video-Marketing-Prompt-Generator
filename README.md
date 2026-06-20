@@ -86,6 +86,45 @@ npm run start
 
 ---
 
+## 🌐 Production Cloud Deployment Guidelines
+
+This full-stack application is optimized to run smoothly on contemporary cloud platforms such as **Render**, **Railway**, **Google Cloud Run**, or **fly.io** as a unified Node.js service.
+
+### General Environment Setup
+When configuring your production service, make sure the following variables are defined within your developer dashboard:
+1. **`GEMINI_API_KEY`** (Required): Your private Google Gemini AI Studio key.
+2. **`NODE_ENV`**: Set to `production` (this ensures asset caching is enabled and optimization switches are active).
+3. **`PORT`**: Set automatically by most providers, or defaulted to `3000`.
+
+---
+
+## 🚀 Step-by-Step Hosting Deployments
+
+### Option A: Render (Web Service)
+1. **Create Web Service**: Click **New +** > **Web Service** on Render and connect your GitHub repository.
+2. **Runtime**: Select **Node**.
+3. **Build Command**: `npm install && npm run build`
+4. **Start Command**: `npm run start` (this runs the optimized, compiled `dist/server.cjs` master script).
+5. **Environment Variables**: Add your `GEMINI_API_KEY` under the service's Environment panel.
+
+### Option B: Railway
+1. **New Project**: Connect your GitHub repository directly to your Railway dashboard.
+2. **Automatic Detection**: Railway will automatically detect the `package.json` file.
+3. **Variables**: Click **Variables** > **New Variable** and add `GEMINI_API_KEY`.
+4. **Deploy**: Railway runs `npm run build` and boots the production start sequence out of the box.
+
+### Option C: Google Cloud Run & Docker
+We ship an optimized multi-stage build structure. To deploy instantly on Cloud Run with your custom container build:
+```bash
+# Build & deploy to GCP Container Registry
+gcloud run deploy ai-video-prompts \
+  --source . \
+  --set-env-vars="GEMINI_API_KEY=your_key_here" \
+  --allow-unauthenticated
+```
+
+---
+
 ## 🌌 Connecting to Local Open-Source AI Video Generators
 
 Once you generate your unified Master Prompts within the app, deploy them into local generator configurations:

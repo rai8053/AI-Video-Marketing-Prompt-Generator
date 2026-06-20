@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, GenerateVideosOperation } from "@google/genai";
 import { exec, execFile } from "child_process";
 import "dotenv/config";
 
@@ -207,6 +207,127 @@ async function startServer() {
     } catch (err: any) {
       console.error("Gemini model prompt creation error:", err);
       res.status(500).json({ error: err.message || "An issue was encountered communicating with the AI service." });
+    }
+  });
+
+  // Generates high-fidelity keyframe image for free simulation using Imagen 4
+  app.post("/api/generate-image", async (req, res) => {
+    const { prompt, aspectRatio = "16:9" } = req.body;
+    if (!prompt) {
+      return res.status(400).json({ error: "Prompt is required" });
+    }
+
+    try {
+      const ai = getGeminiClient();
+      const response = await ai.models.generateImages({
+        model: 'imagen-4.0-generate-001',
+        prompt: prompt,
+        config: {
+          numberOfImages: 1,
+          outputMimeType: 'image/jpeg',
+          aspectRatio: aspectRatio === "9:16" ? "9:16" : "16:9",
+        },
+      });
+
+      if (response && response.generatedImages?.[0]?.image?.imageBytes) {
+        res.json({ 
+          success: true, 
+          imageUrl: `data:image/jpeg;base64,${response.generatedImages[0].image.imageBytes}` 
+        });
+      } else {
+        throw new Error("No image data returned from Google Imagen.");
+      }
+    } catch (err: any) {
+      console.warn("Imagen generation failed, falling back gracefully to client dynamic simulation:", err.message);
+      res.json({ 
+        success: false, 
+        fallback: true,
+        error: err.message || "Failed to generate AI keyframe image."
+      });
+    }
+  });
+
+  // 1. Start Veo video generation
+  app.post("/api/generate-video", async (req, res) => {
+    const { prompt, aspectRatio = "16:9" } = req.body;
+    if (!prompt) {
+      return res.status(400).json({ error: "Prompt is required" });
+    }
+
+    try {
+      const ai = getGeminiClient();
+      const operation = await ai.models.generateVideos({
+        model: 'veo-3.1-lite-generate-preview',
+        prompt: prompt,
+        config: {
+          numberOfVideos: 1,
+          resolution: '720p',
+          aspectRatio: aspectRatio === "9:16" ? "9:16" : "16:9"
+        }
+      });
+      res.json({ success: true, operationName: operation.name });
+    } catch (err: any) {
+      console.error("Veo video generation initiation error:", err);
+      res.status(500).json({ error: err.message || "Failed to start AI Video generation." });
+    }
+  });
+
+  // 2. Poll Veo video status
+  app.post("/api/video-status", async (req, res) => {
+    const { operationName } = req.body;
+    if (!operationName) {
+      return res.status(400).json({ error: "Operation name is required" });
+    }
+
+    try {
+      const ai = getGeminiClient();
+      const op = new GenerateVideosOperation();
+      op.name = operationName;
+      const updated = await ai.operations.getVideosOperation({ operation: op });
+      res.json({ success: true, done: updated.done });
+    } catch (err: any) {
+      console.error("Veo video status query error:", err);
+      res.status(500).json({ error: err.message || "Failed to check video status." });
+    }
+  });
+
+  // 3. Download / Stream Veo video
+  app.post("/api/video-download", async (req, res) => {
+    const { operationName } = req.body;
+    if (!operationName) {
+      return res.status(400).json({ error: "Operation name is required" });
+    }
+
+    try {
+      const ai = getGeminiClient();
+      const key = process.env.GEMINI_API_KEY;
+      if (!key) {
+        throw new Error("GEMINI_API_KEY environment variable is not configured.");
+      }
+      
+      const op = new GenerateVideosOperation();
+      op.name = operationName;
+      const updated = await ai.operations.getVideosOperation({ operation: op });
+      
+      const uri = updated.response?.generatedVideos?.[0]?.video?.uri;
+      if (!uri) {
+        return res.status(404).json({ error: "Video URI not found or video is not completed yet." });
+      }
+
+      const videoRes = await fetch(uri, {
+        headers: { 'x-goog-api-key': key },
+      });
+
+      res.setHeader('Content-Type', 'video/mp4');
+      videoRes.body!.pipeTo(
+        new WritableStream({
+          write(chunk) { res.write(chunk); },
+          close() { res.end(); },
+        })
+      );
+    } catch (err: any) {
+      console.error("Veo video download streaming error:", err);
+      res.status(500).json({ error: err.message || "Failed to download generated video." });
     }
   });
 

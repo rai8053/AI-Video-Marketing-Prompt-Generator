@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Globe,
   Sparkles,
@@ -20,7 +20,11 @@ import {
   Sliders,
   ChevronDown,
   Inbox,
-  Sparkle
+  Sparkle,
+  Play,
+  Pause,
+  Square,
+  Download
 } from "lucide-react";
 
 // Types matching updated server.ts response
@@ -106,6 +110,181 @@ export default function App() {
   // Local Video Model Setup instructions states
   const [localInstructionsOpen, setLocalInstructionsOpen] = useState(true);
   const [localTab, setLocalTab] = useState<"comfyui" | "python" | "models">("comfyui");
+
+  // Active Simulated Playback and Veo Generation Engine State Hooks
+  const [visualTab, setVisualTab] = useState<"simulation" | "veo">("simulation");
+  const [keyframeImageUrl, setKeyframeImageUrl] = useState<string | null>(null);
+  const [keyframeLoading, setKeyframeLoading] = useState(false);
+  const [videoStatus, setVideoStatus] = useState<"idle" | "rendering" | "polling" | "downloading" | "ready" | "error">("idle");
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const [veoOpName, setVeoOpName] = useState<string | null>(null);
+  const [videoBlobUrl, setVideoBlobUrl] = useState<string | null>(null);
+  const [simPlaying, setSimPlaying] = useState(false);
+  const [simTime, setSimTime] = useState(0);
+  const [activeTimelineIdx, setActiveTimelineIdx] = useState(0);
+
+  // Simple procedural chord synthesizer on Web Audio API to match selected tone preferences
+  const playSynthNote = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      
+      const isEnergetic = tonePreference.toLowerCase().includes("energetic");
+      osc.type = isEnergetic ? "sawtooth" : "triangle";
+      osc.frequency.setValueAtTime(isEnergetic ? 165 : 110, ctx.currentTime);
+      
+      gainNode.gain.setValueAtTime(0.001, ctx.currentTime);
+      gainNode.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 0.3);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 3.5);
+      
+      osc.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      
+      osc.start();
+      osc.stop(ctx.currentTime + 3.6);
+    } catch (_) {}
+  };
+
+  // Generate high-fidelity keyframe image from back-end Express service using Imagen 4
+  const generateKeyframe = async (promptText: string) => {
+    setKeyframeLoading(true);
+    setKeyframeImageUrl(null);
+    try {
+      const res = await fetch("/api/generate-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: promptText || "High-end brand marketing product showcase" })
+      });
+      const data = await res.json();
+      if (data.success && data.imageUrl) {
+        setKeyframeImageUrl(data.imageUrl);
+      }
+    } catch (e) {
+      console.warn("Could not generate AI keyframe image, falling back to dynamic simulated styling.");
+    } finally {
+      setKeyframeLoading(false);
+    }
+  };
+
+  // Direct video generation pipeline via Google Veo 3.1
+  const handleGenerateVeoVideo = async () => {
+    if (!marketingPackage || !marketingPackage.singleUnifiedMasterPrompt) return;
+    setVideoStatus("rendering");
+    setVideoError(null);
+    setVideoBlobUrl(null);
+    
+    try {
+      const res = await fetch("/api/generate-video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          prompt: marketingPackage.singleUnifiedMasterPrompt,
+          aspectRatio: marketingPackage.metadata?.aspectRatio || "16:9"
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to initiate video rendering.");
+      }
+      
+      setVeoOpName(data.operationName);
+      setVideoStatus("polling");
+      pollVeoStatus(data.operationName);
+    } catch (err: any) {
+      setVideoError(err.message || "Failed to initiate Google Veo production nodes.");
+      setVideoStatus("error");
+    }
+  };
+
+  const pollVeoStatus = (opName: string) => {
+    if ((window as any)._veoPollId) {
+      clearInterval((window as any)._veoPollId);
+    }
+
+    const pollId = setInterval(async () => {
+      try {
+        const res = await fetch("/api/video-status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ operationName: opName })
+        });
+        const data = await res.json();
+        
+        if (data.done) {
+          clearInterval(pollId);
+          setVideoStatus("downloading");
+          downloadVeoVideo(opName);
+        }
+      } catch (err) {
+        console.warn("Polling error:", err);
+      }
+    }, 5500);
+    
+    (window as any)._veoPollId = pollId;
+  };
+
+  const downloadVeoVideo = async (opName: string) => {
+    try {
+      const res = await fetch("/api/video-download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operationName: opName })
+      });
+      if (!res.ok) {
+        throw new Error("Could not retrieve completed video stream.");
+      }
+      const blob = await res.blob();
+      const localUrl = URL.createObjectURL(blob);
+      setVideoBlobUrl(localUrl);
+      setVideoStatus("ready");
+    } catch (err: any) {
+      setVideoError(err.message || "Unable to download generated video.");
+      setVideoStatus("error");
+    }
+  };
+
+  // Simulated playback tracker
+  useEffect(() => {
+    let interval: any = null;
+    if (simPlaying && marketingPackage) {
+      if (simTime === 0) playSynthNote();
+      
+      interval = setInterval(() => {
+        setSimTime((prev) => {
+          const nextVal = prev + 1;
+          if (nextVal > 30) {
+            setSimPlaying(false);
+            return 0;
+          }
+          
+          const totalSteps = marketingPackage.timeline?.length || 1;
+          const stepSeconds = 30 / totalSteps;
+          const currentIdx = Math.min(Math.floor(nextVal / stepSeconds), totalSteps - 1);
+          setActiveTimelineIdx(currentIdx);
+          
+          if (nextVal % 6 === 0) {
+            playSynthNote();
+          }
+          return nextVal;
+        });
+      }, 1000);
+    } else {
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [simPlaying, marketingPackage, simTime]);
+
+  // Clean polling tasks on unmount
+  useEffect(() => {
+    return () => {
+      if ((window as any)._veoPollId) {
+        clearInterval((window as any)._veoPollId);
+      }
+    };
+  }, []);
 
   const buildYamlPrompt = (pkg: CampaignPackage): string => {
     if (!pkg || !pkg.metadata) return "";
@@ -230,6 +409,19 @@ ${timelineYaml}`;
       }
       setMarketingPackage(data.package);
       setCurrentStep("complete");
+      
+      // Reset active player and generation states
+      setSimPlaying(false);
+      setSimTime(0);
+      setActiveTimelineIdx(0);
+      setVideoStatus("idle");
+      setVideoBlobUrl(null);
+      setVideoError(null);
+      
+      // Request brand scene keyframe visual automatically
+      if (data.package && data.package.singleUnifiedMasterPrompt) {
+        generateKeyframe(data.package.singleUnifiedMasterPrompt);
+      }
     } catch (err: any) {
       setErrorMsg(err.message || "AI model connection failed. Double-check your GEMINI_API_KEY settings.");
       setCurrentStep("scraped");
@@ -246,6 +438,18 @@ ${timelineYaml}`;
     setVariationSeed(1);
     setCurrentStep("idle");
     setErrorMsg("");
+    
+    // Reset cinematic states
+    setKeyframeImageUrl(null);
+    setVideoStatus("idle");
+    setVideoBlobUrl(null);
+    setVideoError(null);
+    setSimPlaying(false);
+    setSimTime(0);
+    setActiveTimelineIdx(0);
+    if ((window as any)._veoPollId) {
+      clearInterval((window as any)._veoPollId);
+    }
   };
 
   return (
@@ -910,6 +1114,309 @@ video = pipe(
                       New
                     </button>
                   </div>
+                </div>
+
+                {/* CINEMATIC VIDEO & PLAYBACK STUDIO */}
+                <div id="cinematic-video-studio" className="bg-[#0b0b0b] border border-[#221e15]/65 rounded-xl overflow-hidden shadow-2xl relative">
+                  {/* Studio Header */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between px-5 py-3 border-b border-[#1b1914] bg-[#0d0d0d] gap-3">
+                    <div className="flex items-center gap-2">
+                      <Clapperboard className="w-4.5 h-4.5 text-[#c4a661] animate-pulse" />
+                      <span className="text-xs tracking-widest font-bold uppercase text-white font-mono">
+                        Cinematic Video Creation Studio
+                      </span>
+                    </div>
+
+                    {/* Mode Tabs */}
+                    <div className="flex bg-[#050505] p-0.5 rounded border border-[#222] self-start sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={() => setVisualTab("simulation")}
+                        className={`px-3 py-1 text-[9.5px] font-mono uppercase tracking-widest rounded transition-all flex items-center gap-1.5 ${
+                          visualTab === "simulation"
+                            ? "bg-[#c4a661] text-[#080808] font-black"
+                            : "text-[#808080] hover:text-white"
+                        }`}
+                      >
+                        <span>🎬 Sandbox Player (Free)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setVisualTab("veo")}
+                        className={`px-3 py-1 text-[9.5px] font-mono uppercase tracking-widest rounded transition-all flex items-center gap-1.5 ${
+                          visualTab === "veo"
+                            ? "bg-[#c4a661] text-[#080808] font-black"
+                            : "text-[#808080] hover:text-white"
+                        }`}
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        <span>🤖 Google Veo 3.1 AI</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* ACTIVE TAB VIEWS */}
+                  {visualTab === "simulation" ? (
+                    <div className="p-5 flex flex-col gap-4">
+                      
+                      {/* Subtitled Player stage */}
+                      <div className="relative aspect-video w-full bg-[#050505] rounded-lg border border-[#1a1a1a] overflow-hidden flex flex-col items-center justify-center group-hover:scale-[1.002] transition-transform">
+                        
+                        {/* 1. Rendering image with dynamic motion effects */}
+                        {keyframeLoading ? (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#070707] text-center gap-3">
+                            <div className="w-10 h-10 rounded-full border border-dashed border-[#c4a661] animate-spin flex items-center justify-center">
+                              <Sparkles className="w-4 h-4 text-[#c4a661] animate-pulse" />
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-[10px] uppercase tracking-widest font-mono text-[#808080] block font-bold">Drafting Keyframe Visual</span>
+                              <span className="text-[9px] font-serif text-[#c4a661] italic">Communicating with Google Imagen 4 engine...</span>
+                            </div>
+                          </div>
+                        ) : keyframeImageUrl ? (
+                          <img
+                            src={keyframeImageUrl}
+                            alt="Cinematic frame simulation"
+                            referrerPolicy="no-referrer"
+                            className={`w-full h-full object-cover select-none transition-transform duration-[4000ms] ease-out ${
+                              simPlaying ? "scale-105 translate-y-1 rotate-1" : "scale-100"
+                            }`}
+                          />
+                        ) : (
+                          /* Dynamic abstract styling backdrop based on aesthetic tone preferences */
+                          <div className="absolute inset-0 bg-gradient-to-tr from-[#0b0805] via-[#12110c] to-[#0d0d0d] flex items-center justify-center overflow-hidden">
+                            {/* Animated light particles and waves */}
+                            <div className="absolute inset-0 opacity-15 bg-[radial-gradient(ellipse_at_center,rgba(196,166,97,0.18),transparent_70%)] animate-pulse"></div>
+                            
+                            {/* Dynamic lens glare element */}
+                            <div className={`absolute w-72 h-72 rounded-full bg-[#c4a661]/5 blur-3xl transition-all duration-[3000ms] ${
+                              simPlaying ? "translate-x-8 -translate-y-4 scale-110 opacity-70" : "translate-x-0 translate-y-0 opacity-40"
+                            }`}></div>
+
+                            <div className="text-center z-10 p-6 space-y-2">
+                              <span className="text-[#505050] text-[9px] font-mono tracking-widest uppercase block">&bull; SIMULATED BACKDROP &bull;</span>
+                              <p className="text-xs text-[#a0a0a0] max-w-sm italic font-serif leading-relaxed">
+                                "{marketingPackage.metadata.environmentDescription}"
+                              </p>
+                              <span className="text-[10px] text-[#c4a661]/80 font-mono tracking-wide block">
+                                Dynamic pan zoom motions active during play
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Top progress metadata bar */}
+                        <div className="absolute top-0 inset-x-0 p-3 bg-gradient-to-b from-black/80 to-transparent flex justify-between items-center text-[9px] font-mono text-[#a0a0a0] z-20">
+                          <span className="flex items-center gap-1.5">
+                            <span className={`w-2 h-2 rounded-full ${simPlaying ? "bg-red-500 animate-pulse" : "bg-[#505050]"}`}></span>
+                            <span>{simPlaying ? "PLAYING SIMULATION" : "READY"}</span>
+                          </span>
+                          <span className="text-[#c4a661]">
+                            {String(Math.floor(simTime / 60)).padStart(2, "0")}:{String(simTime % 60).padStart(2, "0")} / 00:30
+                          </span>
+                        </div>
+
+                        {/* Story subtitle bar overlaid on the visual scene */}
+                        <div className="absolute bottom-0 inset-x-0 p-5 bg-gradient-to-t from-black/95 via-black/75 to-transparent flex flex-col justify-end text-center z-20 min-h-[90px]">
+                          <span className="text-[#c4a661] text-[9px] font-mono tracking-widest uppercase font-black mb-1">
+                            SCENE {activeTimelineIdx + 1} &bull; TIMESTAMP {marketingPackage.timeline[activeTimelineIdx]?.timestamp || "00:00"}
+                          </span>
+                          <p className="text-xs text-white max-w-xl mx-auto leading-relaxed font-sans font-medium select-none text-shadow animate-fade-in">
+                            {marketingPackage.timeline[activeTimelineIdx]?.action || "Dynamic storyboard visual description timeline will render dynamically here."}
+                          </p>
+                        </div>
+
+                      </div>
+
+                      {/* Interactive Controls Bar */}
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-[#0d0d0d] border border-[#1a1a1a] p-3 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          {simPlaying ? (
+                            <button
+                              type="button"
+                              onClick={() => setSimPlaying(false)}
+                              className="w-10 h-10 rounded-full bg-amber-500 text-[#080808] flex items-center justify-center hover:bg-white transition-colors"
+                              title="Pause"
+                            >
+                              <Pause className="w-4 h-4 fill-current" />
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setSimPlaying(true)}
+                              className="w-10 h-10 rounded-full bg-[#c4a661] text-[#080808] flex items-center justify-center hover:bg-white transition-colors animate-pulse"
+                              title="Start Cinematic Playback"
+                            >
+                              <Play className="w-4 h-4 fill-current ml-0.5" />
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSimPlaying(false);
+                              setSimTime(0);
+                              setActiveTimelineIdx(0);
+                            }}
+                            className="w-9 h-9 rounded-full bg-[#121212] border border-[#222] hover:border-[#333] text-gray-400 hover:text-white flex items-center justify-center transition-colors"
+                            title="Reset Timeline"
+                          >
+                            <Square className="w-3.5 h-3.5 fill-current" />
+                          </button>
+
+                          <div className="text-left font-mono text-[10px] text-gray-400">
+                            <span className="block text-[#606060] text-[8px] uppercase font-bold">Acoustic Audio Mode</span>
+                            <span className="text-[#c4a661] font-semibold flex items-center gap-1">
+                              <Volume2 className="w-3 h-3" /> Tone synth active
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex-1 max-w-xs w-full bg-[#161616] h-1.5 rounded-full overflow-hidden relative border border-[#222]">
+                          <div 
+                            className="bg-gradient-to-r from-[#c4a661] to-amber-500 h-full rounded-full transition-all duration-1000 ease-linear"
+                            style={{ width: `${(simTime / 30) * 100}%` }}
+                          ></div>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <span className="text-[10px] text-white font-semibold block font-serif italic">
+                            100% Free Sandbox Creator
+                          </span>
+                          <span className="text-[9px] text-[#808080] font-mono leading-none block mt-0.5">
+                            Client-Side Interactive Studio
+                          </span>
+                        </div>
+                      </div>
+
+                    </div>
+                  ) : (
+                    /* Veo 3.1 Tab View */
+                    <div className="p-5 flex flex-col gap-4">
+                      
+                      {videoStatus === "idle" && (
+                        <div className="bg-[#0e0e0e] border border-[#222] rounded-lg p-8 text-center space-y-4">
+                          <div className="w-12 h-12 rounded-full bg-[#1a1a1a] border border-[#2d271a] flex items-center justify-center mx-auto text-[#c4a661]">
+                            <Video className="w-5 h-5" />
+                          </div>
+                          
+                          <div className="max-w-md mx-auto space-y-2">
+                            <h4 className="text-xs uppercase tracking-widest text-white font-bold font-mono">
+                              Google Veo 3.1 Video Engine
+                            </h4>
+                            <p className="text-xs text-gray-400 leading-relaxed font-serif">
+                              Stitch your multi-sentence grand Master Prompt directly into Google's premier text-to-video AI. Produces a real, state-of-the-art cinematic <strong className="text-white">MP4 video file</strong> fully rendered by Google's server nodes.
+                            </p>
+                          </div>
+
+                          <div className="pt-2">
+                            <button
+                              type="button"
+                              onClick={handleGenerateVeoVideo}
+                              className="bg-[#c4a661] text-[#080808] px-8 py-2.5 rounded-full font-bold text-[10.5px] uppercase tracking-widest hover:bg-white transition-colors"
+                            >
+                              Synthesize Video Asset (Veo)
+                            </button>
+                            <span className="block text-[9px] text-[#505050] font-mono mt-2.5">
+                              Note: Requires a functional Gemini API key with Video generation enabled.
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Video status state loaders */}
+                      {["rendering", "polling", "downloading"].includes(videoStatus) && (
+                        <div className="bg-[#0e0e0e] border border-dashed border-[#c4a661]/40 rounded-lg p-10 text-center space-y-5">
+                          <div className="relative w-14 h-14 mx-auto">
+                            <div className="absolute inset-0 rounded-full border border-dashed border-[#c4a661] animate-spin"></div>
+                            <div className="absolute inset-1.5 bg-[#080808] rounded-full flex items-center justify-center text-[#c4a661]">
+                              <Sparkles className="w-4 h-4 animate-pulse" />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <h5 className="text-[10px] uppercase font-mono text-[#c4a661] tracking-widest font-bold">
+                              {videoStatus === "rendering" ? "BOOTING SERVER NODES" : videoStatus === "polling" ? "RENDERING VIDEO TRACK" : "RETRIEVING VIDEO STREAM"}
+                            </h5>
+                            
+                            <p className="text-xs text-white max-w-sm mx-auto font-serif italic">
+                              {videoStatus === "rendering" ? "Assigning isolated commercial GPU clusters for video synthesis..." : videoStatus === "polling" ? "Processing cinematic optical flow parameters step-by-step..." : "Downloading fully assembled MP4 video bits from the cloud pipeline..."}
+                            </p>
+                          </div>
+
+                          <div className="w-48 bg-[#161616] h-1 rounded-full overflow-hidden relative mx-auto">
+                            <div className="bg-gradient-to-r from-amber-500 to-[#c4a661] h-full rounded-full animate-pulse w-full"></div>
+                          </div>
+
+                          <span className="text-[9px] text-[#606060] font-mono block">
+                            Veo processes can take up to 2-3 minutes. Keep this tab active!
+                          </span>
+                        </div>
+                      )}
+
+                      {videoStatus === "ready" && videoBlobUrl && (
+                        <div className="space-y-4">
+                          <div className="relative aspect-video w-full bg-black rounded-lg border border-[#222] overflow-hidden">
+                            <video
+                              src={videoBlobUrl}
+                              controls
+                              autoPlay
+                              loop
+                              className="w-full h-full object-contain"
+                            ></video>
+                          </div>
+                          
+                          <div className="flex items-center justify-between bg-[#0d0d0d] p-3 rounded-lg border border-[#1a1a1a]">
+                            <div className="text-left font-mono text-[10px] text-gray-400">
+                              <span className="text-emerald-400 font-bold block">✓ SYNTHESIS SUCCESSFUL</span>
+                              <span className="text-[#808080] text-[9px]">Google Veo `.mp4` format clip</span>
+                            </div>
+
+                            <a
+                              href={videoBlobUrl}
+                              download={`${marketingPackage.brandName.toLowerCase().replace(/\s+/g, "_")}_campaign_veo.mp4`}
+                              className="bg-[#c4a661] hover:bg-white text-[#080808] font-bold text-[10px] uppercase tracking-widest px-4 py-2 rounded flex items-center gap-1.5 transition-colors font-mono"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              <span>Download Movie File</span>
+                            </a>
+                          </div>
+                        </div>
+                      )}
+
+                      {videoStatus === "error" && (
+                        <div className="bg-[#120c0c] border border-red-900/30 rounded-lg p-6 text-center space-y-3.5">
+                          <AlertCircle className="w-7 h-7 text-red-400 mx-auto" />
+                          <div className="space-y-1">
+                            <h5 className="text-xs uppercase font-mono text-red-300 font-bold tracking-widest">
+                              Veo Synthesis Encountered an Issue
+                            </h5>
+                            <p className="text-[11px] text-red-200/80 leading-relaxed max-w-sm mx-auto">
+                              {videoError || "Google Video models require a paid billing account / active token access settings. Verify API console configuration inside Settings."}
+                            </p>
+                          </div>
+                          
+                          <div className="pt-1 flex justify-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setVisualTab("simulation")}
+                              className="bg-[#1a1a1a] border border-[#333] hover:border-[#444] text-xs px-4 py-1.5 rounded text-white transition-all font-mono"
+                            >
+                              Run Free Sandbox Player
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleGenerateVeoVideo}
+                              className="bg-red-500/10 border border-red-500/30 text-xs px-4 py-1.5 rounded text-red-300 hover:bg-red-500/20 transition-all font-mono"
+                            >
+                              Retry Veo Generation
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                    </div>
+                  )}
                 </div>
 
                 {/* THE UNIFIED CINEMATIC MASTER PROMPT BLOCK (AS REQUESTED TO GENERATE ONE COMPLETE PROMPT AS OPPOSED TO SCENES) */}
